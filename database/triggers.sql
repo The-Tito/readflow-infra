@@ -65,10 +65,9 @@ DECLARE
   v_best_streak INT;
   v_today DATE := CURRENT_DATE;
 BEGIN
-  -- Solo actuar cuando completed_at pasa de NULL a un valor
-  IF OLD.completed_at IS NULL AND NEW.completed_at IS NOT NULL THEN
+  -- Solo actuar si el attempt se insertó con completed_at definido
+  IF NEW.completed_at IS NOT NULL THEN
 
-    -- Obtener estado actual del streak
     SELECT
       current_streak,
       best_streak,
@@ -103,11 +102,11 @@ BEGIN
       v_best_streak := v_current_streak;
     END IF;
 
-    -- Persistir cambios en user_streaks
+    -- Persistir cambios
     UPDATE user_streaks
     SET
-      current_streak    = v_current_streak,
-      best_streak       = v_best_streak,
+      current_streak     = v_current_streak,
+      best_streak        = v_best_streak,
       last_activity_date = NOW()
     WHERE user_id = NEW.user_id;
 
@@ -117,8 +116,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Nuevo trigger en INSERT
 CREATE OR REPLACE TRIGGER trg_update_streak_on_attempt
-AFTER UPDATE ON attempts
+AFTER INSERT ON attempts
 FOR EACH ROW
 EXECUTE FUNCTION fn_update_user_streak();
 
