@@ -39,3 +39,42 @@ JOIN evaluation_types et ON ss.evaluation_type_id = et.id
 LEFT JOIN attempts a_t0 ON ss.id = a_t0.study_session_id AND a_t0.timing_tag = 'T0' AND a_t0.completed_at IS NOT NULL
 LEFT JOIN attempts a_t48 ON ss.id = a_t48.study_session_id AND a_t48.timing_tag = 'T48' AND a_t48.completed_at IS NOT NULL
 ORDER BY ss.created_at ASC;
+
+-- Vista para hipótesis (stats globales de la plataforma)
+CREATE OR REPLACE VIEW view_hypothesis_metrics AS
+WITH base_data AS (
+    SELECT 
+        u.id AS user_id,
+        ss.id AS session_id,
+        dl.display_name AS difficulty_level,
+        fn_get_session_status(ss.id) AS session_status,
+        a_t0.score AS t0_score,
+        a_t48.score AS t48_score,
+        a_t48.iri_value AS iri_value
+    FROM users u
+    LEFT JOIN study_sessions ss ON u.id = ss.user_id
+    LEFT JOIN difficulty_levels dl ON ss.difficulty_level_id = dl.id
+    LEFT JOIN attempts a_t0 ON ss.id = a_t0.study_session_id AND a_t0.timing_tag = 'T0' AND a_t0.completed_at IS NOT NULL
+    LEFT JOIN attempts a_t48 ON ss.id = a_t48.study_session_id AND a_t48.timing_tag = 'T48' AND a_t48.completed_at IS NOT NULL
+)
+SELECT 
+    COUNT(DISTINCT user_id) AS total_users,
+    
+    COUNT(DISTINCT CASE WHEN session_status = 'completed' THEN session_id END) AS total_completed_sessions,
+    
+    ROUND((COUNT(DISTINCT CASE WHEN t48_score IS NOT NULL THEN user_id END)::numeric / 
+           NULLIF(COUNT(DISTINCT user_id), 0)) * 100, 2) AS system_retention_rate,
+           
+    ROUND(AVG(CASE WHEN session_status = 'completed' THEN iri_value END)::numeric, 2) AS global_avg_iri,
+    
+    ROUND(AVG(CASE WHEN session_status = 'completed' THEN (t48_score - t0_score) END)::numeric, 2) AS avg_score_improvement,
+    
+    (SELECT jsonb_object_agg(difficulty_level, session_count)
+     FROM (
+         SELECT difficulty_level, COUNT(DISTINCT session_id) AS session_count
+         FROM base_data
+         WHERE session_status = 'completed' AND difficulty_level IS NOT NULL
+         GROUP BY difficulty_level
+     ) AS diff_stats
+    ) AS difficulty_distribution
+FROM base_data;

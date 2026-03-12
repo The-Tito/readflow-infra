@@ -131,8 +131,56 @@ $$;
 
 
 -- ============================================================
--- SP 2: sp_create_study_session
 -- ============================================================
+-- SP 2: sp_create_study_session
+-- Crea una sesión de estudio completa en la BD de forma atómica.
+-- ============================================================
+
+CREATE OR REPLACE PROCEDURE sp_create_study_session(
+  p_user_id INT,
+  p_document_hash VARCHAR,
+  p_original_filename VARCHAR,
+  p_difficulty_level_id INT,
+  p_evaluation_type_id INT,
+  p_title VARCHAR,
+  p_summary_body TEXT,
+  p_quiz_data_t0 JSONB
+)
+LANGUAGE plpgsql AS $$
+DECLARE
+  v_document_id INT;
+  v_session_id INT;
+BEGIN
+  -- Validaciones de llaves foráneas antes del proceso atómico
+  IF NOT EXISTS (SELECT 1 FROM difficulty_levels WHERE id = p_difficulty_level_id) THEN
+    RAISE EXCEPTION 'El nivel de dificultad (id=%) no existe en difficulty_levels', p_difficulty_level_id;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM evaluation_types WHERE id = p_evaluation_type_id) THEN
+    RAISE EXCEPTION 'El tipo de evaluación (id=%) no existe en evaluation_types', p_evaluation_type_id;
+  END IF;
+
+  -- Inserts secuenciales (orden estricto requerido)
+  INSERT INTO documents (user_id, document_hash, original_filename)
+  VALUES (p_user_id, p_document_hash, p_original_filename)
+  RETURNING id INTO v_document_id;
+
+  INSERT INTO study_sessions (user_id, document_id, difficulty_level_id, evaluation_type_id, title, summary_body)
+  VALUES (p_user_id, v_document_id, p_difficulty_level_id, p_evaluation_type_id, p_title, p_summary_body)
+  RETURNING id INTO v_session_id;
+
+  INSERT INTO quizz_data (study_session_id, quiz_data_t0)
+  VALUES (v_session_id, p_quiz_data_t0);
+
+  -- Commit explícito al finalizar todo correctamente
+  COMMIT;
+EXCEPTION
+  WHEN OTHERS THEN
+    -- Rollback explícito si cualquier parte falla
+    ROLLBACK;
+    RAISE;
+END;
+$$;
 
 
 -- ============================================================
