@@ -65,9 +65,9 @@ SELECT
     ROUND((COUNT(DISTINCT CASE WHEN t48_score IS NOT NULL THEN user_id END)::numeric / 
            NULLIF(COUNT(DISTINCT user_id), 0)) * 100, 2) AS system_retention_rate,
            
-    ROUND(AVG(CASE WHEN session_status = 'completed' THEN iri_value END)::numeric, 2) AS global_avg_iri,
+    ROUND(COALESCE(AVG(CASE WHEN session_status = 'completed' THEN iri_value END), 0)::numeric, 2) AS global_avg_iri,,
     
-    ROUND(AVG(CASE WHEN session_status = 'completed' THEN (t48_score - t0_score) END)::numeric, 2) AS avg_score_improvement,
+    ROUND(COALESCE(AVG(CASE WHEN session_status = 'completed' THEN (t48_score - t0_score) END), 0)::numeric, 2) AS avg_score_improvement,,
     
     (SELECT jsonb_object_agg(difficulty_level, session_count)
      FROM (
